@@ -79,6 +79,23 @@ header p{margin:3px 0 0;color:var(--muted);font-size:12px}
 .close{margin-left:auto}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none;z-index:60}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.up{width:min(860px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.up h2{font-size:17px;margin:0}
+.up .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.up input[type=text],.up input[type=date]{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 9px}
+.uplist{display:flex;flex-direction:column;gap:8px}
+.upitem{display:grid;grid-template-columns:72px minmax(0,1fr) 150px auto auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px}
+.upitem img{width:72px;height:72px;object-fit:contain;background:var(--stage);border-radius:6px}
+.upitem input[type=text]{width:100%;font-weight:600}
+.upitem .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+.upitem .hb{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);cursor:pointer;color:var(--muted);font-size:16px}
+.upitem .hb[aria-pressed="true"]{background:var(--heart);border-color:var(--heart);color:#fff}
+.upitem .st{font-size:12px;color:var(--muted);min-width:44px;text-align:right}
+.upitem .st.ok{color:var(--accent);font-weight:600} .upitem .st.err{color:var(--heart)}
+.drophint{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);cursor:pointer}
+.drophint:hover,.drophint.on{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
+body.dragging::after{content:"여기에 놓으면 소재로 올라가요";position:fixed;inset:10px;border:3px dashed var(--accent);border-radius:16px;background:rgba(13,110,138,.08);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);z-index:40;pointer-events:none}
+@media (max-width:720px){ .upitem{grid-template-columns:56px minmax(0,1fr) auto} .upitem img{width:56px;height:56px} .upitem input[type=date]{grid-column:2} }
 @media (max-width:720px){ .box{grid-template-columns:1fr} .view{min-height:220px} .bar{position:static} }
 @media (prefers-reduced-motion:reduce){.toast,.card{transition:none}}
 </style>
@@ -87,11 +104,13 @@ header p{margin:3px 0 0;color:var(--muted);font-size:12px}
 <header>
   <div>
     <h1>소재 갤러리</h1>
-    <p>팀이 배너 스튜디오에서 저장한 소재가 모두 모여요. 성과가 좋았던 소재엔 ♥를 눌러 따로 모아보세요.</p>
+    <p>팀이 배너 스튜디오에서 저장한 소재와 직접 올린 기존 소재가 모두 모여요. 성과가 좋았던 소재엔 ♥를 눌러 따로 모아보세요.</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
     <span class="status" id="status"></span>
     <a class="btn" href="/" target="_blank" rel="noopener">배너 스튜디오 열기 ↗</a>
+    <button class="btn primary" type="button" id="upBtn">＋ 기존 소재 올리기</button>
+    <input type="file" id="upFile" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
   </div>
 </header>
 
@@ -117,7 +136,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TPL={tilt:'라방 · 기울어진 카드',alarm:'라방 · 알람시계',gift:'라방 · 1+1+증정품',grid:'블럭형',side:'좌 상품 + 우 할인율',calendar:'캘린더형',big:'할인율 소구',family:'패밀리세일',center:'센터 포커스',left:'좌측 카피',promo:'할인 띠배너',frame:'매거진 프레임',split:'대각 스플릿'};
 const tplName=e=>e.tname||TPL[e.tid]||e.tid||'';
-const TYPE={png:'PNG',jpg:'JPG',figma:'피그마',save:'작업함'};
+const TYPE={png:'PNG',jpg:'JPG',figma:'피그마',save:'작업함',upload:'직접 올림'};
 const myName=()=>{ try{ return localStorage.getItem('banner-studio-author')||''; }catch(e){ return ''; } };
 const fmt=t=>{ const d=new Date(t); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const day=t=>{ const d=new Date(t); return `${d.getMonth()+1}월 ${d.getDate()}일`; };
@@ -174,7 +193,7 @@ function render(){
   hb.hidden=!nh && !showHidden; hb.textContent=showHidden?'← 갤러리로 돌아가기':`숨긴 소재 ${nh}개`; hb.setAttribute('aria-pressed',showHidden);
   const list=filtered();
   if(!list.length){
-    $('list').innerHTML=`<div class="empty">${view==='fav'&&!st.q&&!st.who&&!st.size?'아직 ♥ 표시한 소재가 없어요.<br>성과가 좋았던 소재 카드의 ♥를 눌러보세요.':groups.length?'조건에 맞는 소재가 없어요.':'아직 저장한 소재가 없어요.<br>배너 스튜디오에서 PNG·JPG·피그마로 저장하면 여기에 모여요.'}</div>`;
+    $('list').innerHTML=`<div class="empty">${view==='fav'&&!st.q&&!st.who&&!st.size?'아직 ♥ 표시한 소재가 없어요.<br>성과가 좋았던 소재 카드의 ♥를 눌러보세요.':groups.length?'조건에 맞는 소재가 없어요.':'아직 소재가 없어요.<br>오른쪽 위 ‘＋ 기존 소재 올리기’로 내 컴퓨터의 소재를 올리거나,<br>배너 스튜디오에서 PNG·JPG·피그마로 저장하면 여기에 모여요.'}</div>`;
     return;
   }
   $('list').innerHTML=`<div class="grid">${list.map(g=>{ const m=marks[g.key]||{}, l=g.latest, fav=isFav(g);
@@ -183,7 +202,7 @@ function render(){
       <button class="heart" type="button" data-heart="${esc(g.key)}" aria-pressed="${fav}" title="${fav?'성과 좋은 소재에서 빼기':'성과 좋은 소재로 표시'}" aria-label="하트">${fav?'♥':'♡'}</button>
       <div class="info">
         <div class="title${g.title?'':' none'}">${esc(g.title||l.headline||'이름 없는 소재')}</div>
-        <div class="meta">${esc(g.authors.join(', ')||'이름 없음')} · ${esc(tplName(l))} · ${esc((l.size||'').replace('x','×'))}</div>
+        <div class="meta">${esc(g.authors.join(', ')||'이름 없음')} · ${l.type==='upload'?'직접 올린 소재':esc(tplName(l))} · ${esc((l.size||'').replace('x','×'))}</div>
         <div class="meta">${day(g.time)}${g.versions.length>1?`<span class="tag">저장 ${g.versions.length}번</span>`:''}</div>
         ${m.memo?`<div class="memo" title="${esc(m.memo)}">📈 ${esc(m.memo)}</div>`:''}
       </div></article>`; }).join('')}</div>`;
@@ -218,13 +237,13 @@ function openDetail(key){
           <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="status" id="memoSt"></span><button class="btn small" type="button" data-memo>메모 저장</button></div></div>
         <dl class="dl">
           <dt>만든 사람</dt><dd>${esc(cur.name||'이름 없음')}</dd>
-          <dt>저장</dt><dd>${fmt(cur.time)} · ${cur.types.map(t=>TYPE[t]||t).join(', ')}</dd>
-          <dt>템플릿</dt><dd>${esc(tplName(cur))} · ${esc((cur.size||'').replace('x','×'))}</dd>
+          <dt>${cur.type==='upload'?'제작일':'저장'}</dt><dd>${cur.type==='upload'?fmt(cur.time).split(' ')[0]:fmt(cur.time)+' · '+cur.types.map(t=>TYPE[t]||t).join(', ')}</dd>
+          <dt>${cur.type==='upload'?'크기':'템플릿'}</dt><dd>${cur.type==='upload'?'':esc(tplName(cur))+' · '}${esc((cur.size||'').replace('x','×'))}</dd>
           ${cur.headline?`<dt>헤드라인</dt><dd>${esc(cur.headline)}</dd>`:''}
         </dl>
         ${g.versions.length>1?`<div><label>저장한 버전 ${g.versions.length}개</label><div class="vers">${g.versions.map(v=>`<button type="button" data-v="${esc(v.id)}" aria-pressed="${v===cur}" title="${fmt(v.time)}"><img alt="" loading="lazy" src="/api/live/${encodeURIComponent(v.id)}?thumb=1"></button>`).join('')}</div></div>`:''}
         <div class="row">
-          <button class="btn primary" type="button" data-edit>이 소재로 편집하기 ↗</button>
+          <button class="btn primary" type="button" data-edit title="${cur.type==='upload'?'완성 이미지를 배경으로 열고 그 위에 덧붙여 수정해요':'문구·상품·위치까지 그대로 열려요'}">이 소재로 편집하기 ↗</button>
           <button class="btn" type="button" data-dl>이미지 받기</button>
         </div>
         <div class="row" style="margin-top:auto"><button class="btn small" type="button" data-hide>${m.hidden?'갤러리에 다시 보이기':'갤러리에서 숨기기'}</button></div>
@@ -260,6 +279,86 @@ let qT=0; $('q').addEventListener('input',e=>{ clearTimeout(qT); qT=setTimeout((
 ['who','size','sort'].forEach(id=>$(id).addEventListener('change',e=>{ st[id]=e.target.value; render(); }));
 $('showHidden').onclick=()=>{ showHidden=!showHidden; render(); };
 if(location.hash==='#fav'){ view='fav'; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='fav')); }
+/* ---------- 기존 소재 올리기 ---------- */
+const MAX_FULL=2*1024*1024;
+const browserId=()=>{ try{ let b=localStorage.getItem('banner-studio-bid'); if(!b){ b=Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); localStorage.setItem('banner-studio-bid',b); } return b; }catch(e){ return 'g'+Math.random().toString(36).slice(2,12); } };
+const ymd=t=>{ const d=new Date(t); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const newCid=()=>'c-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const loadImg=f=>new Promise((res,rej)=>{ const u=URL.createObjectURL(f), i=new Image(); i.onload=()=>res(i); i.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('img')); }; i.src=u; });
+function render2(img,max){ const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)), c=document.createElement('canvas'); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
+  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height); return c; }
+const toBlob=(c,q)=>new Promise(r=>c.toBlob(r,'image/jpeg',q));
+let upItems=[], upModal=null, uploading=false;
+function openUpload(files){
+  const list=[...files].filter(f=>/^image\/(png|jpeg|webp|gif)$/.test(f.type));
+  if(!list.length){ toast('PNG·JPG·WEBP 이미지 파일만 올릴 수 있어요'); return; }
+  if(!upModal){
+    upItems=[];
+    upModal=document.createElement('div'); upModal.className='modal';
+    upModal.innerHTML=`<div class="up" role="dialog" aria-modal="true" aria-label="기존 소재 올리기">
+      <div class="row"><h2>기존 소재 올리기</h2><button class="btn small" type="button" data-upx style="margin-left:auto">닫기</button></div>
+      <p class="status" style="margin:0">소재명과 제작일을 확인하고 올려주세요. 성과가 좋았던 소재는 ♥를 눌러두면 바로 ‘성과 좋은 소재’에 들어가요.</p>
+      <div class="row"><label for="upWho" style="font-weight:600">만든 사람</label><input type="text" id="upWho" maxlength="30" placeholder="이름"></div>
+      <div class="uplist" id="upList"></div>
+      <div class="drophint" id="upMore" tabindex="0" role="button">＋ 이미지 더 추가 (여기에 끌어다 놓아도 돼요)</div>
+      <div class="row"><span class="status" id="upSt"></span><span class="spacer"></span><button class="btn" type="button" data-upx>취소</button><button class="btn primary" type="button" id="upGo">올리기</button></div>
+    </div>`;
+    document.body.appendChild(upModal);
+    upModal.querySelector('#upWho').value=myName();
+    upModal.addEventListener('click',e=>{ if(e.target.closest('[data-upx]')){ if(!uploading) closeUpload(); return; }
+      const hb=e.target.closest('.hb'); if(hb){ const it=upItems[+hb.dataset.i]; it.fav=!it.fav; hb.setAttribute('aria-pressed',it.fav); hb.textContent=it.fav?'♥':'♡'; return; }
+      const rm=e.target.closest('[data-rm]'); if(rm&&!uploading){ upItems[+rm.dataset.rm].removed=true; rm.closest('.upitem').remove(); syncUp(); } });
+    const more=upModal.querySelector('#upMore'); more.onclick=()=>$('upFile').click(); more.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('upFile').click(); } };
+    upModal.querySelector('#upGo').onclick=doUpload;
+  }
+  const box=upModal.querySelector('#upList');
+  list.forEach(f=>{ const i=upItems.length, it={file:f,title:f.name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').trim().slice(0,40),made:f.lastModified||Date.now(),fav:false};
+    upItems.push(it);
+    const row=document.createElement('div'); row.className='upitem'; row.dataset.i=i;
+    row.innerHTML=`<img alt=""><div><input type="text" maxlength="40" aria-label="소재명" value="${esc(it.title)}"><div class="sub">${esc(f.name)} · ${(f.size/1024/1024).toFixed(1)}MB</div></div>
+      <input type="date" aria-label="제작일" value="${ymd(it.made)}" max="${ymd(Date.now())}">
+      <button type="button" class="hb" data-i="${i}" aria-pressed="false" title="성과 좋은 소재로 표시" aria-label="하트">♡</button>
+      <span class="st"><button type="button" class="btn small" data-rm="${i}">빼기</button></span>`;
+    row.querySelector('img').src=URL.createObjectURL(f);
+    row.querySelector('input[type=text]').oninput=e=>{ it.title=e.target.value; };
+    row.querySelector('input[type=date]').onchange=e=>{ const v=e.target.value; if(v){ const [y,m,d]=v.split('-').map(Number); it.made=new Date(y,m-1,d,12).getTime(); } };
+    box.appendChild(row); it.row=row; });
+  syncUp();
+}
+function syncUp(){ const n=upItems.filter(i=>!i.removed&&!i.done).length; upModal.querySelector('#upGo').textContent=n?`${n}개 올리기`:'올리기'; upModal.querySelector('#upGo').disabled=!n||uploading; }
+function closeUpload(){ if(upModal){ upModal.remove(); upModal=null; upItems=[]; } }
+async function doUpload(){
+  const who=upModal.querySelector('#upWho').value.trim();
+  if(who){ try{ localStorage.setItem('banner-studio-author',who); }catch(e){} }
+  const todo=upItems.filter(i=>!i.removed&&!i.done); if(!todo.length) return;
+  uploading=true; syncUp(); let ok=0, fail=0;
+  for(const it of todo){
+    const st=it.row.querySelector('.st'); st.className='st'; st.textContent='올리는 중…';
+    try{
+      const img=await loadImg(it.file);
+      const thumb=render2(img,420).toDataURL('image/jpeg',.8);
+      let full=await toBlob(render2(img,2000),.9); if(full.size>MAX_FULL) full=await toBlob(render2(img,1600),.82); if(full.size>MAX_FULL) full=await toBlob(render2(img,1280),.75);
+      const cid=newCid();
+      const r=await fetch('/api/live?event=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:browserId()+'-up',name:who||'이름 없음',type:'upload',thumb,tid:'',tname:'직접 올린 소재',size:`${img.naturalWidth}x${img.naturalHeight}`,headline:'',title:(it.title||'').trim().slice(0,40),cid,made:it.made})});
+      if(!r.ok) throw new Error(r.status); const j=await r.json();
+      const r2=await fetch('/api/live/'+encodeURIComponent(j.id)+'/full',{method:'PUT',headers:{'content-type':'image/jpeg'},body:full}); if(!r2.ok) throw new Error(r2.status);
+      if(it.fav) await fetch('/api/live?fav=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:cid,fav:true,name:who})});
+      it.done=true; ok++; st.className='st ok'; st.textContent='완료';
+    }catch(e){ fail++; st.className='st err'; st.textContent='실패'; }
+    upModal.querySelector('#upSt').textContent=`${ok+fail} / ${todo.length}`;
+  }
+  uploading=false; syncUp(); await load(true);
+  if(!fail){ toast(`소재 ${ok}개를 올렸어요`); closeUpload(); }
+  else upModal.querySelector('#upSt').textContent=`${ok}개 올림 · ${fail}개 실패 — ‘${fail}개 올리기’로 다시 시도할 수 있어요`;
+}
+$('upBtn').onclick=()=>$('upFile').click();
+$('upFile').onchange=e=>{ if(e.target.files.length) openUpload(e.target.files); e.target.value=''; };
+let dragN=0;
+document.addEventListener('dragenter',e=>{ if([...(e.dataTransfer?.types||[])].includes('Files')){ dragN++; document.body.classList.add('dragging'); } });
+document.addEventListener('dragleave',()=>{ dragN=Math.max(0,dragN-1); if(!dragN) document.body.classList.remove('dragging'); });
+document.addEventListener('dragover',e=>{ if([...(e.dataTransfer?.types||[])].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop',e=>{ if(!e.dataTransfer||!e.dataTransfer.files.length) return; e.preventDefault(); dragN=0; document.body.classList.remove('dragging'); if(!uploading) openUpload(e.dataTransfer.files); });
+
 $('list').innerHTML='<div class="empty">불러오는 중…</div>';
 load();
 setInterval(()=>{ if(document.visibilityState==='visible' && !modal) load(true); },120000);

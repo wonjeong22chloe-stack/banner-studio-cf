@@ -14,6 +14,7 @@
 //   GET    /api/live/:id             세션 작업 상태   ?thumb=1 미리보기  ?full=1 큰 이미지  ?ev=1 저장한 소재의 작업 상태
 //   POST   /api/live                 작업 상태 보내기   ?ping=1 작업 중 신호   ?event=1 소재 저장 기록   ?fav=1 하트·메모·숨기기
 //   PUT    /api/live/:eid/full       저장한 소재의 큰 이미지 올리기
+//   (소재 갤러리에서 기존 소재를 올릴 때도 ?event=1 에 type:"upload", made(제작일) 로 기록해요)
 
 const KEEP_DAYS = 30;
 const MAX_IMG = 5 * 1024 * 1024;
@@ -222,10 +223,12 @@ async function live(req, env, id, sub) {
       sid: b.sid, name, type: clip(b.type, 8), tid: clip(b.tid, 16), size: clip(b.size, 12), headline: clip(b.headline, 40),
       title: clip(b.title, 40), cid: okId(b.cid) ? b.cid : "", tname: clip(b.tname, 24), time: now,
     };
+    // 갤러리에 직접 올린 기존 소재: 제작일을 그대로 써요
+    if (ev.type === "upload") { const made = Number(b.made); if (made > 1420070400000 && made <= now) ev.time = made; }
     const thumb = jpegBytes(b.thumb);
     if (thumb && thumb.length < 300 * 1024) await env.FILES.put("et/" + eid, thumb, { metadata: { type: "image/jpeg" } });
     const body = typeof b.state === "string" ? JSON.stringify({ state: b.state, imgs: b.imgs || null }) : null;
-    await put(db, "ev", eid, now, ev, body);
+    await put(db, "ev", eid, ev.time, ev, body);
     if (pm) await db.prepare("UPDATE items SET meta=? WHERE ns='sess' AND id=?").bind(JSON.stringify({ ...pm, exports: (pm.exports || 0) + 1, updated: now, name }), b.sid).run();
     return json({ ok: true, id: eid });
   }
