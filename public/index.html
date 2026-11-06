@@ -38,6 +38,7 @@ header.top p{margin:2px 0 0;color:var(--muted);font-size:12px}
 .insp{max-height:calc(100vh - 24px);overflow-y:auto;scrollbar-width:thin}
 .toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .toolbar code{font-family:var(--mono);font-size:11px}
+.tleft #autoSt{color:var(--accent);font-weight:500}
 .tleft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;flex:1 1 100%}
 .cname{display:flex;align-items:center;gap:6px}
 .cname label{font-weight:600;color:var(--fg);font-size:12px;white-space:nowrap}
@@ -355,7 +356,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <!-- CENTER: stage -->
   <main class="stagecol" style="min-width:0">
     <div class="toolbar">
-      <div class="tleft"><div class="cname"><label for="cName">소재명</label><input type="text" id="cName" maxlength="40" placeholder="소재명을 적어주세요" autocomplete="off"></div><span id="sizeInfo"></span></div>
+      <div class="tleft"><div class="cname"><label for="cName">소재명</label><input type="text" id="cName" maxlength="40" placeholder="소재명을 적어주세요" autocomplete="off"></div><span id="autoSt" class="hint" role="status" aria-live="polite"></span><span id="sizeInfo"></span></div>
       <div class="actions">
         <button class="btn small" id="galleryBtn" type="button" hidden title="지금까지 만든 소재를 불러와 이어서 수정">소재 갤러리</button>
         <button class="btn small" id="teamBtn" type="button" hidden>팀 현황</button>
@@ -1435,8 +1436,8 @@ function histSoon(){ clearTimeout(histT); histT=setTimeout(histCommit,450); }
 function checkpoint(){ histCommit(); }
 function syncUndo(){ const b=$('undoBtn'); if(b) b.disabled=!hist.length; const r=$('redoBtn'); if(r) r.disabled=!future.length; }
 function applySnap(json){
-  histApplying=true; const d=JSON.parse(json);
-  Object.keys(d).forEach(k=>S[k]=d[k]); if(!Array.isArray(S.items)||S.items.length!==prodImgs.length) arrangeItems();
+  histApplying=true; const d=JSON.parse(json), keep={workId:S.workId,teamWorkId:S.teamWorkId,workName:S.workName};
+  Object.keys(d).forEach(k=>S[k]=d[k]); Object.assign(S,keep); if(!Array.isArray(S.items)||S.items.length!==prodImgs.length) arrangeItems();
   sel=null; logoListKey=''; textKey=''; syncLeft(); renderInspector(); scheduleRender(); scheduleThumbs(); save(); histApplying=false;
 }
 function undo(){ histCommit(); if(!hist.length){ toast('더 되돌릴 작업이 없어요'); return; }
@@ -2285,8 +2286,8 @@ function startDrag(e,p,mode){
 canvas.addEventListener('pointermove',e=>{
   const p=toCanvas(e);
   if(!drag){ const ds=dispScale(), b=curBox();
-    if(b){ const pad=6/ds; if(Math.abs(p.x-(b.x+b.w+pad))<12/ds && Math.abs(p.y-(b.y+b.h+pad))<12/ds){ canvas.style.cursor='nwse-resize'; return; } }
-    canvas.style.cursor=hitTest(p)?'move':'default'; return; }
+    if(b){ const pad=6/ds; if(Math.abs(p.x-(b.x+b.w+pad))<12/ds && Math.abs(p.y-(b.y+b.h+pad))<12/ds){ canvas.style.cursor='nwse-resize'; canvas.title=sel&&sel.type==='shape'&&S.shapes[sel.i]&&S.shapes[sel.i].type==='image'?'Shift를 누른 채 끌면 비율 없이 늘어나요':''; return; } }
+    canvas.title=''; canvas.style.cursor=hitTest(p)?'move':'default'; return; }
   const t=target();
   if(drag.mode==='move'){
     let nx=drag.ox+(p.x-drag.sx), ny=drag.oy+(p.y-drag.sy); guides=[];
@@ -2298,7 +2299,13 @@ canvas.addEventListener('pointermove',e=>{
     if(sel.type==='el'&&sel.key==='logo') S.logoPos='custom';
   } else {
     const f=Math.max(.1,Math.hypot(p.x-drag.cx,p.y-drag.cy)/drag.d0), o=drag.snap; drag.moved=true;
-    if(sel.type==='shape'){ t.sc=(o.sc||1)*f; scheduleRender(); return; }
+    if(sel.type==='shape'){
+      // boxes (and images with Shift) resize freely: the top-left corner stays, the handle sets width and height
+      if(t.type==='rect'||(t.type==='image'&&e.shiftKey)){
+        if(!drag.free){ const b=shapeBox(t); drag.free={L:b.x,T:b.y}; t.w=b.w; t.h=b.h; t.sc=1; t.x=b.x-(t.tx||0); t.y=b.y-(t.ty||0); }
+        t.w=Math.max(4,p.x-drag.free.L); t.h=Math.max(4,p.y-drag.free.T); t.x=drag.free.L-(t.tx||0); t.y=drag.free.T-(t.ty||0);
+        if(t.radius) t.radius=Math.min(t.radius,t.w/2,t.h/2); scheduleRender(); return; }
+      t.sc=(o.sc||1)*f; scheduleRender(); return; }
     if(sel.type==='prod'){ t.s=Math.max(.05,o.s*f); if(o.sh!=null) t.sh=o.sh*f; scheduleRender(); return; }
     if(sel.type==='card'){ t.s=Math.max(.1,(o.s||1)*f); scheduleRender(); return; }
     if(sel.type==='obj') t.s=o.s*f;
@@ -2325,6 +2332,31 @@ document.addEventListener('keydown',e=>{
 let kT=0;
 window.addEventListener('resize',scheduleRender);
 
+/* ---------- 자동 저장: a banner with a 소재명 keeps saving itself to 작업함 (this browser) and, on the team site, to 팀 작업함 ---------- */
+const AUTO={t:0, teamT:0, sig:'', teamSig:'', lastTeam:0, busy:false, teamOff:false};
+const workSig = () => JSON.stringify(Object.assign({},S,{workId:0,teamWorkId:0,workName:0}))+'|'+prodImgs.length+'|'+cardPics.length+'|'+(bgImg?bgImg.src.length:0);
+function autoStatus(t){ const el=$('autoSt'); if(el) el.textContent=t; }
+function autoWorkSoon(){ if(!autoReady) return; if(!(S.cname||'').trim()){ autoStatus(''); return; } clearTimeout(AUTO.t); AUTO.t=setTimeout(autoWork,3000); }
+async function autoWork(){
+  const name=(S.cname||'').trim(); if(!name||AUTO.busy) return;
+  const sig=workSig(); const hm=()=>{ const d=new Date(); return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; };
+  AUTO.busy=true;
+  try{
+    if(sig!==AUTO.sig){
+      const w=await packWork(name, S.workId||undefined); await idbDo('readwrite',st=>st.put(w),'works');
+      S.workId=w.id; S.workName=name; AUTO.sig=sig; try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){}
+      autoStatus(`자동 저장됨 ${hm()}`);
+    }
+    if(TW.on && !AUTO.teamOff && sig!==AUTO.teamSig){
+      if(TW.needsPw && !teamPw()) autoStatus(`자동 저장됨 ${hm()} · 팀 작업함은 팀 비밀번호를 넣으면 자동 저장돼요`);
+      else { const wait=AUTO.lastTeam+60e3-Date.now();
+        if(wait>0){ clearTimeout(AUTO.teamT); AUTO.teamT=setTimeout(autoWork,wait+200); autoStatus(`자동 저장됨 ${hm()} · 팀 작업함은 1분마다 저장돼요`); }
+        else { const it=await twSave(name, myName(), S.teamWorkId||null); S.teamWorkId=it.id; AUTO.teamSig=sig; AUTO.lastTeam=Date.now();
+          try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){} autoStatus(`팀 작업함에 자동 저장됨 ${hm()}`); } }
+    }
+  }catch(e){ if(e&&e.code==='bad_password'){ AUTO.teamOff=true; autoStatus('자동 저장됨 · 팀 비밀번호가 맞지 않아 팀 작업함 저장은 멈췄어요'); } }
+  finally{ AUTO.busy=false; }
+}
 /* ---------- 소재명: every banner gets a name (used for file names, the team gallery and the copy box) ---------- */
 const newCid = () => 'c-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function setCname(v){ S.cname=String(v||'').trim().slice(0,40); if(!S.cid) S.cid=newCid(); syncLeft(); save(); updateCopy(); }
@@ -2656,7 +2688,7 @@ async function liveEvent(type){ if(!LIVE.on) return;
   }catch(e){} }
 async function liveInit(){
   try{ const r=await fetch('/api/live',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); if(!j||!j.ok) return; }catch(e){ return; }
-  LIVE.on=true; $('liveBar').hidden=false; $('teamBtn').hidden=false; $('galleryBtn').hidden=false;
+  LIVE.on=true; if(TW.on===null) twLoad(); $('liveBar').hidden=false; $('teamBtn').hidden=false; $('galleryBtn').hidden=false;
   $('galleryBtn').onclick=()=>showGalleryPicker();
   const f=$('myName'); f.value=myName(); f.classList.toggle('need',!f.value);
   f.oninput=()=>{ try{ localStorage.setItem('banner-studio-author',f.value.trim()); }catch(e){} f.classList.toggle('need',!f.value.trim()); };
@@ -3082,7 +3114,7 @@ async function initAI(){
 /* ---------- toast / persistence ---------- */
 let tT=0; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2200); }
 let sT=0;
-function save(){ histSoon(); autoSave(); liveSoon(); clearTimeout(sT); sT=setTimeout(()=>{ try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){} },400); }
+function save(){ histSoon(); autoSave(); liveSoon(); autoWorkSoon(); clearTimeout(sT); sT=setTimeout(()=>{ try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){} },400); }
 function restore(){
   try{ const raw=localStorage.getItem('banner-studio-v3'); if(!raw) return false; const d=JSON.parse(raw);
     if(!d||!d.els||!SIZES[d.size]||!TPL.find(t=>t.id===d.tid)) return false;
