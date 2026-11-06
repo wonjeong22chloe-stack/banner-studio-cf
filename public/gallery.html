@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>소재 갤러리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#EEEDF1; --panel:#FFFFFF; --line:#DDDAE4; --fg:#1C1A22; --muted:#6C6878;
+  --accent:#0D6E8A; --accent-fg:#FFFFFF; --accent-soft:#DCEEF3; --stage:#E3E1E8;
+  --heart:#E0245E; --heart-soft:#FCE4EC;
+  --ui:"IBM Plex Sans KR","Noto Sans KR",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141318; --panel:#1D1C22; --line:#302E37; --fg:#ECEAF1; --muted:#9B97A6;
+  --accent:#4FB3CF; --accent-fg:#0B1A20; --accent-soft:#1B3740; --stage:#18171C;
+  --heart:#FF5C8A; --heart-soft:#3A1B26; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg);margin:0}
+body{font-family:var(--ui);font-size:13px;line-height:1.45;padding:18px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+h1{font-size:19px;font-weight:700;margin:0;letter-spacing:-.01em}
+header p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:500;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.small{padding:4px 9px;font-size:12px}
+.btn:focus-visible,.card:focus-visible,.heart:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px;position:sticky;top:8px;z-index:5}
+.tabs{display:flex;gap:4px;background:var(--bg);padding:3px;border-radius:9px}
+.tab{border:0;background:transparent;border-radius:7px;padding:6px 12px;cursor:pointer;font-weight:600;color:var(--muted)}
+.tab[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tab .n{font-weight:500;margin-left:4px;font-size:12px}
+.tab.fav[aria-pressed="true"]{color:var(--heart)}
+.bar input[type=search],.bar select{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 9px}
+.bar input[type=search]{flex:1;min-width:180px}
+.spacer{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;position:relative;transition:border-color .12s}
+.card:hover{border-color:var(--muted)}
+.card.isfav{border-color:var(--heart)}
+.thumb{background:var(--stage);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.thumb img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.heart{position:absolute;top:8px;right:8px;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--panel);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.heart:hover{color:var(--heart)}
+.heart[aria-pressed="true"]{color:#fff;background:var(--heart);border-color:var(--heart)}
+.info{padding:10px 11px 11px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.title{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title.none{color:var(--muted);font-weight:500}
+.meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.memo{font-size:12px;background:var(--heart-soft);border-radius:6px;padding:4px 7px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;margin-left:4px;color:var(--muted);font-weight:500}
+.empty{text-align:center;color:var(--muted);padding:60px 16px;background:var(--panel);border:1px dashed var(--line);border-radius:12px}
+.status{color:var(--muted);font-size:12px}
+/* detail */
+.modal{position:fixed;inset:0;background:rgba(10,10,14,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+.box{background:var(--panel);border-radius:14px;width:min(980px,100%);max-height:calc(100vh - 32px);overflow:auto;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,1fr);gap:0}
+.view{background:var(--stage);display:flex;align-items:center;justify-content:center;padding:16px;min-height:320px}
+.view img{max-width:100%;max-height:calc(100vh - 120px);object-fit:contain;display:block;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.side{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.side h2{font-size:17px;margin:0;word-break:keep-all}
+.side .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.side label{font-weight:600;font-size:12px}
+.side textarea{width:100%;min-height:74px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px;resize:vertical}
+.side input[type=text]{width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 9px}
+.vers{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.vers button{flex:0 0 auto;width:64px;border:2px solid transparent;border-radius:8px;padding:0;background:var(--stage);cursor:pointer;overflow:hidden}
+.vers button[aria-pressed="true"]{border-color:var(--accent)}
+.vers img{width:100%;aspect-ratio:1/1;object-fit:contain;display:block}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;margin:0}
+.dl dt{color:var(--muted)} .dl dd{margin:0}
+.bigheart{font-size:14px;font-weight:600}
+.bigheart[aria-pressed="true"]{background:var(--heart);border-color:var(--heart);color:#fff}
+.close{margin-left:auto}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none;z-index:60}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (max-width:720px){ .box{grid-template-columns:1fr} .view{min-height:220px} .bar{position:static} }
+@media (prefers-reduced-motion:reduce){.toast,.card{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>소재 갤러리</h1>
+    <p>팀이 배너 스튜디오에서 저장한 소재가 모두 모여요. 성과가 좋았던 소재엔 ♥를 눌러 따로 모아보세요.</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span class="status" id="status"></span>
+    <a class="btn" href="/" target="_blank" rel="noopener">배너 스튜디오 열기 ↗</a>
+  </div>
+</header>
+
+<div class="bar" role="search">
+  <div class="tabs" id="tabs">
+    <button class="tab" type="button" data-v="all" aria-pressed="true">전체<span class="n" id="nAll"></span></button>
+    <button class="tab fav" type="button" data-v="fav" aria-pressed="false">♥ 성과 좋은 소재<span class="n" id="nFav"></span></button>
+  </div>
+  <input type="search" id="q" placeholder="소재명·문구로 찾기" aria-label="소재 검색">
+  <select id="who" aria-label="만든 사람"><option value="">모든 사람</option></select>
+  <select id="size" aria-label="사이즈"><option value="">모든 사이즈</option></select>
+  <select id="sort" aria-label="정렬"><option value="new">최근 저장순</option><option value="old">오래된 순</option><option value="name">이름순</option><option value="many">많이 저장한 순</option></select>
+  <span class="spacer"></span>
+  <button class="btn small" type="button" id="showHidden" aria-pressed="false" hidden></button>
+</div>
+
+<div id="list"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TPL={tilt:'라방 · 기울어진 카드',alarm:'라방 · 알람시계',gift:'라방 · 1+1+증정품',grid:'블럭형',side:'좌 상품 + 우 할인율',calendar:'캘린더형',big:'할인율 소구',family:'패밀리세일',center:'센터 포커스',left:'좌측 카피',promo:'할인 띠배너',frame:'매거진 프레임',split:'대각 스플릿'};
+const tplName=e=>e.tname||TPL[e.tid]||e.tid||'';
+const TYPE={png:'PNG',jpg:'JPG',figma:'피그마',save:'작업함'};
+const myName=()=>{ try{ return localStorage.getItem('banner-studio-author')||''; }catch(e){ return ''; } };
+const fmt=t=>{ const d=new Date(t); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+const day=t=>{ const d=new Date(t); return `${d.getMonth()+1}월 ${d.getDate()}일`; };
+let tT=0; const toast=m=>{ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2200); };
+
+let groups=[], marks={}, view='all', showHidden=false, loaded=false;
+const st={q:'',who:'',size:'',sort:'new'};
+try{ const v=sessionStorage.getItem('gallery-view'); if(v) Object.assign(st,JSON.parse(v)); }catch(e){}
+
+/* every saved banner is one event; events of the same creative (same 소재 id) become one card with versions */
+function build(events){
+  const map=new Map();
+  events.forEach(e=>{ const key=e.cid||e.id; let g=map.get(key); if(!g){ g={key,events:[]}; map.set(key,g); } g.events.push(e); });
+  return [...map.values()].map(g=>{ g.events.sort((a,b)=>b.time-a.time); const l=g.events[0];
+    g.latest=l; g.title=(g.events.find(e=>e.title)||{}).title||''; g.time=l.time; g.first=g.events[g.events.length-1].time;
+    g.authors=[...new Set(g.events.map(e=>e.name).filter(Boolean))]; g.sizes=[...new Set(g.events.map(e=>e.size).filter(Boolean))];
+    // one version per distinct export moment: PNG+JPG of the same design a few seconds apart count once
+    const vers=[]; g.events.forEach(e=>{ const p=vers[vers.length-1]; if(p && Math.abs(p.time-e.time)<90e3 && p.size===e.size){ p.types.push(e.type); return; } vers.push({...e,types:[e.type]}); });
+    g.versions=vers; return g; });
+}
+async function load(quiet){
+  try{
+    const r=await fetch('/api/live?gallery=1',{cache:'no-store'}); if(!r.ok) throw new Error(r.status);
+    const j=await r.json(); if(!j.ok) throw 0;
+    marks=j.marks||{}; groups=build(j.events||[]); loaded=true;
+    $('status').textContent=`${fmt(Date.now())} 기준`;
+    fillSelects(); render();
+  }catch(e){ if(!loaded) $('list').innerHTML=`<div class="empty">소재 목록을 불러오지 못했어요.<br>팀 사이트(Netlify)에서 열었는지 확인해주세요.</div>`; else if(!quiet) toast('새로고침하지 못했어요'); }
+}
+function fillSelects(){
+  const who=[...new Set(groups.flatMap(g=>g.authors))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const sizes=[...new Set(groups.flatMap(g=>g.sizes))].sort();
+  const set=(id,list,label)=>{ const el=$(id), cur=st[id]; el.innerHTML=`<option value="">${label}</option>`+list.map(v=>`<option value="${esc(v)}">${esc(id==='size'?v.replace('x','×'):v)}</option>`).join(''); el.value=list.includes(cur)?cur:''; st[id]=el.value; };
+  set('who',who,'모든 사람'); set('size',sizes,'모든 사이즈');
+  $('q').value=st.q; $('sort').value=st.sort;
+}
+const isFav=g=>!!(marks[g.key]&&marks[g.key].fav);
+const isHidden=g=>!!(marks[g.key]&&marks[g.key].hidden);
+function filtered(){
+  const q=st.q.trim().toLowerCase();
+  let list=groups.filter(g=>showHidden?isHidden(g):!isHidden(g));
+  const nAll=list.length, nFav=list.filter(isFav).length;
+  $('nAll').textContent=nAll; $('nFav').textContent=nFav;
+  if(view==='fav') list=list.filter(isFav);
+  if(st.who) list=list.filter(g=>g.authors.includes(st.who));
+  if(st.size) list=list.filter(g=>g.sizes.includes(st.size));
+  if(q) list=list.filter(g=>[g.title,g.latest.headline,(marks[g.key]||{}).memo,g.authors.join(' ')].join(' ').toLowerCase().includes(q));
+  const by={new:(a,b)=>b.time-a.time, old:(a,b)=>a.first-b.first, name:(a,b)=>(a.title||'￿').localeCompare(b.title||'￿','ko'), many:(a,b)=>b.versions.length-a.versions.length||b.time-a.time};
+  return list.sort(by[st.sort]||by.new);
+}
+function render(){
+  try{ sessionStorage.setItem('gallery-view',JSON.stringify(st)); }catch(e){}
+  const nh=groups.filter(isHidden).length, hb=$('showHidden');
+  hb.hidden=!nh && !showHidden; hb.textContent=showHidden?'← 갤러리로 돌아가기':`숨긴 소재 ${nh}개`; hb.setAttribute('aria-pressed',showHidden);
+  const list=filtered();
+  if(!list.length){
+    $('list').innerHTML=`<div class="empty">${view==='fav'&&!st.q&&!st.who&&!st.size?'아직 ♥ 표시한 소재가 없어요.<br>성과가 좋았던 소재 카드의 ♥를 눌러보세요.':groups.length?'조건에 맞는 소재가 없어요.':'아직 저장한 소재가 없어요.<br>배너 스튜디오에서 PNG·JPG·피그마로 저장하면 여기에 모여요.'}</div>`;
+    return;
+  }
+  $('list').innerHTML=`<div class="grid">${list.map(g=>{ const m=marks[g.key]||{}, l=g.latest, fav=isFav(g);
+    return `<article class="card${fav?' isfav':''}" tabindex="0" data-key="${esc(g.key)}" aria-label="${esc(g.title||l.headline||'이름 없는 소재')}">
+      <div class="thumb"><img loading="lazy" alt="" src="/api/live/${encodeURIComponent(l.id)}?thumb=1"></div>
+      <button class="heart" type="button" data-heart="${esc(g.key)}" aria-pressed="${fav}" title="${fav?'성과 좋은 소재에서 빼기':'성과 좋은 소재로 표시'}" aria-label="하트">${fav?'♥':'♡'}</button>
+      <div class="info">
+        <div class="title${g.title?'':' none'}">${esc(g.title||l.headline||'이름 없는 소재')}</div>
+        <div class="meta">${esc(g.authors.join(', ')||'이름 없음')} · ${esc(tplName(l))} · ${esc((l.size||'').replace('x','×'))}</div>
+        <div class="meta">${day(g.time)}${g.versions.length>1?`<span class="tag">저장 ${g.versions.length}번</span>`:''}</div>
+        ${m.memo?`<div class="memo" title="${esc(m.memo)}">📈 ${esc(m.memo)}</div>`:''}
+      </div></article>`; }).join('')}</div>`;
+}
+async function mark(key, patch){
+  const prev=Object.assign({},marks[key]||{});
+  marks[key]=Object.assign({},prev,patch); render();
+  try{ const r=await fetch('/api/live?fav=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({key,name:myName()},patch))});
+    if(!r.ok) throw 0; const j=await r.json(); marks[key]=j.mark||marks[key]; render(); return true;
+  }catch(e){ marks[key]=prev; render(); toast('저장하지 못했어요. 잠시 뒤 다시 해주세요'); return false; }
+}
+function toggleFav(key){ const on=!(marks[key]&&marks[key].fav); mark(key,{fav:on}).then(ok=>{ if(ok) toast(on?'♥ 성과 좋은 소재로 표시했어요':'하트를 뺐어요'); }); return on; }
+
+/* detail view */
+let modal=null;
+function closeDetail(){ if(modal){ modal.remove(); modal=null; document.removeEventListener('keydown',onKey); } }
+function onKey(e){ if(e.key==='Escape') closeDetail(); }
+function openDetail(key){
+  const g=groups.find(x=>x.key===key); if(!g) return; closeDetail();
+  let cur=g.versions[0];
+  modal=document.createElement('div'); modal.className='modal';
+  modal.addEventListener('click',e=>{ if(e.target===modal) closeDetail(); });
+  document.body.appendChild(modal); document.addEventListener('keydown',onKey);
+  const draw=()=>{ const m=marks[g.key]||{}, fav=!!m.fav;
+    modal.innerHTML=`<div class="box" role="dialog" aria-modal="true" aria-label="소재 자세히 보기">
+      <div class="view"><img alt="${esc(g.title||'소재')}" src="/api/live/${encodeURIComponent(cur.id)}?full=1"></div>
+      <div class="side">
+        <div class="row"><h2>${esc(g.title||cur.headline||'이름 없는 소재')}</h2><button class="btn small close" type="button" data-x>닫기</button></div>
+        <div class="row"><button class="btn bigheart" type="button" data-fav aria-pressed="${fav}">${fav?'♥ 성과 좋은 소재':'♡ 성과 좋은 소재로 표시'}</button>${fav&&m.favBy?`<span class="status">${esc(m.favBy)} 님이 표시</span>`:''}</div>
+        <div><label for="memo">성과 메모</label>
+          <textarea id="memo" maxlength="300" placeholder="예) CTR 2.4% · 전환 1위 · 11/3 라방 메인">${esc(m.memo||'')}</textarea>
+          <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="status" id="memoSt"></span><button class="btn small" type="button" data-memo>메모 저장</button></div></div>
+        <dl class="dl">
+          <dt>만든 사람</dt><dd>${esc(cur.name||'이름 없음')}</dd>
+          <dt>저장</dt><dd>${fmt(cur.time)} · ${cur.types.map(t=>TYPE[t]||t).join(', ')}</dd>
+          <dt>템플릿</dt><dd>${esc(tplName(cur))} · ${esc((cur.size||'').replace('x','×'))}</dd>
+          ${cur.headline?`<dt>헤드라인</dt><dd>${esc(cur.headline)}</dd>`:''}
+        </dl>
+        ${g.versions.length>1?`<div><label>저장한 버전 ${g.versions.length}개</label><div class="vers">${g.versions.map(v=>`<button type="button" data-v="${esc(v.id)}" aria-pressed="${v===cur}" title="${fmt(v.time)}"><img alt="" loading="lazy" src="/api/live/${encodeURIComponent(v.id)}?thumb=1"></button>`).join('')}</div></div>`:''}
+        <div class="row">
+          <button class="btn primary" type="button" data-edit>이 소재로 편집하기 ↗</button>
+          <button class="btn" type="button" data-dl>이미지 받기</button>
+        </div>
+        <div class="row" style="margin-top:auto"><button class="btn small" type="button" data-hide>${m.hidden?'갤러리에 다시 보이기':'갤러리에서 숨기기'}</button></div>
+      </div></div>`;
+  };
+  draw();
+  modal.addEventListener('click',async e=>{
+    const t=e.target.closest('button'); if(!t) return;
+    if(t.hasAttribute('data-x')) return closeDetail();
+    if(t.hasAttribute('data-fav')){ toggleFav(g.key); draw(); return; }
+    if(t.dataset.v){ cur=g.versions.find(v=>v.id===t.dataset.v)||cur; draw(); return; }
+    if(t.hasAttribute('data-memo')){ const memo=modal.querySelector('#memo').value.trim(); if(await mark(g.key,{memo})){ toast('성과 메모를 저장했어요'); draw(); } return; }
+    if(t.hasAttribute('data-edit')){ window.open('/?open='+encodeURIComponent(cur.id),'_blank','noopener'); return; }
+    if(t.hasAttribute('data-dl')){ download(g,cur); return; }
+    if(t.hasAttribute('data-hide')){ const hide=!(marks[g.key]||{}).hidden;
+      if(hide && !confirm('이 소재를 갤러리에서 숨길까요? 오른쪽 위 ‘숨긴 소재’에서 다시 보이게 할 수 있어요.')) return;
+      if(await mark(g.key,{hidden:hide})){ closeDetail(); toast(hide?'갤러리에서 숨겼어요':'다시 보이게 했어요'); } }
+  });
+}
+async function download(g,v){
+  const name=`${(g.title||v.headline||'소재').replace(/[\\/:*?"<>|\n\r\t]+/g,' ').trim()}_${v.size||''}.jpg`;
+  try{ const r=await fetch(`/api/live/${encodeURIComponent(v.id)}?full=1`); if(!r.ok) throw 0; const b=await r.blob();
+    if(window.showSaveFilePicker){ try{ const h=await window.showSaveFilePicker({suggestedName:name,types:[{description:'JPG 이미지',accept:{'image/jpeg':['.jpg']}}]}); const w=await h.createWritable(); await w.write(b); await w.close(); toast('저장했어요'); return; }catch(e){ if(e&&e.name==='AbortError') return; } }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(e){ toast('이미지를 받지 못했어요'); }
+}
+
+$('list').addEventListener('click',e=>{ const h=e.target.closest('[data-heart]'); if(h){ e.stopPropagation(); toggleFav(h.dataset.heart); return; }
+  const c=e.target.closest('.card'); if(c) openDetail(c.dataset.key); });
+$('list').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.classList.contains('card')){ e.preventDefault(); openDetail(e.target.dataset.key); } });
+$('tabs').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b) return; view=b.dataset.v; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-pressed',x===b)); render(); });
+let qT=0; $('q').addEventListener('input',e=>{ clearTimeout(qT); qT=setTimeout(()=>{ st.q=e.target.value; render(); },150); });
+['who','size','sort'].forEach(id=>$(id).addEventListener('change',e=>{ st[id]=e.target.value; render(); }));
+$('showHidden').onclick=()=>{ showHidden=!showHidden; render(); };
+if(location.hash==='#fav'){ view='fav'; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='fav')); }
+$('list').innerHTML='<div class="empty">불러오는 중…</div>';
+load();
+setInterval(()=>{ if(document.visibilityState==='visible' && !modal) load(true); },120000);
+})();
+</script>
+</body>
+</html>
