@@ -77,6 +77,8 @@ header p{margin:3px 0 0;color:var(--muted);font-size:12px}
 .bigheart{font-size:14px;font-weight:600}
 .bigheart[aria-pressed="true"]{background:var(--heart);border-color:var(--heart);color:#fff}
 .close{margin-left:auto}
+.btn.danger{color:var(--heart);border-color:var(--heart)}
+.btn.danger:hover{background:var(--heart);color:#fff}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none;z-index:60}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .up{width:min(860px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -246,7 +248,9 @@ function openDetail(key){
           <button class="btn primary" type="button" data-edit title="${cur.type==='upload'?'완성 이미지를 배경으로 열고 그 위에 덧붙여 수정해요':'문구·상품·위치까지 그대로 열려요'}">이 소재로 편집하기 ↗</button>
           <button class="btn" type="button" data-dl>이미지 받기</button>
         </div>
-        <div class="row" style="margin-top:auto"><button class="btn small" type="button" data-hide>${m.hidden?'갤러리에 다시 보이기':'갤러리에서 숨기기'}</button></div>
+        <div class="row" style="margin-top:auto"><button class="btn small" type="button" data-hide title="목록에서만 안 보이게 해요. 오른쪽 위 ‘숨긴 소재’에서 되살릴 수 있어요">${m.hidden?'갤러리에 다시 보이기':'갤러리에서 숨기기'}</button>
+          <button class="btn small danger" type="button" data-del title="소재와 저장한 버전 ${g.versions.length}개를 완전히 지워요">삭제</button></div>
+        <div class="row" id="delPw" hidden><input type="password" id="delPwIn" placeholder="팀 비밀번호" autocomplete="off" style="flex:1;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 9px"><button class="btn small danger" type="button" data-delgo>삭제</button></div>
       </div></div>`;
   };
   draw();
@@ -258,10 +262,22 @@ function openDetail(key){
     if(t.hasAttribute('data-memo')){ const memo=modal.querySelector('#memo').value.trim(); if(await mark(g.key,{memo})){ toast('성과 메모를 저장했어요'); draw(); } return; }
     if(t.hasAttribute('data-edit')){ window.open('/?open='+encodeURIComponent(cur.id),'_blank','noopener'); return; }
     if(t.hasAttribute('data-dl')){ download(g,cur); return; }
+    if(t.hasAttribute('data-del')){
+      if(!confirm(`‘${g.title||g.latest.headline||'이름 없는 소재'}’를 삭제할까요?\n저장한 버전 ${g.versions.length}개와 하트·메모가 모두 지워지고 되돌릴 수 없어요.`)) return;
+      let pw=''; try{ pw=localStorage.getItem('banner-studio-teampw')||''; }catch(e){}
+      return delGroup(g,pw); }
+    if(t.hasAttribute('data-delgo')){ const pw=modal.querySelector('#delPwIn').value; try{ localStorage.setItem('banner-studio-teampw',pw); }catch(e){} return delGroup(g,pw); }
     if(t.hasAttribute('data-hide')){ const hide=!(marks[g.key]||{}).hidden;
       if(hide && !confirm('이 소재를 갤러리에서 숨길까요? 오른쪽 위 ‘숨긴 소재’에서 다시 보이게 할 수 있어요.')) return;
       if(await mark(g.key,{hidden:hide})){ closeDetail(); toast(hide?'갤러리에서 숨겼어요':'다시 보이게 했어요'); } }
   });
+}
+async function delGroup(g,pw){
+  try{ const r=await fetch('/api/live/'+encodeURIComponent(g.key),{method:'DELETE',headers:pw?{'x-team-password':pw}:{}});
+    if(r.status===401){ const row=modal&&modal.querySelector('#delPw'); if(row){ row.hidden=false; const i=row.querySelector('input'); i.value=''; i.focus(); } toast(pw?'팀 비밀번호가 맞지 않아요':'삭제하려면 팀 비밀번호가 필요해요'); return; }
+    if(!r.ok) throw 0;
+    closeDetail(); groups=groups.filter(x=>x!==g); delete marks[g.key]; render(); toast('소재를 삭제했어요'); load(true);
+  }catch(e){ toast('삭제하지 못했어요. 잠시 뒤 다시 해주세요'); }
 }
 async function download(g,v){
   const name=`${(g.title||v.headline||'소재').replace(/[\\/:*?"<>|\n\r\t]+/g,' ').trim()}_${v.size||''}.jpg`;

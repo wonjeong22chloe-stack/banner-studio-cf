@@ -12,6 +12,7 @@
 //   GET    /api/live                 팀 현황 (작업 세션 + 최근 저장한 소재)
 //   GET    /api/live?gallery=1       소재 갤러리 (저장한 소재 전체 + 하트·메모)
 //   GET    /api/live/:id             세션 작업 상태   ?thumb=1 미리보기  ?full=1 큰 이미지  ?ev=1 저장한 소재의 작업 상태
+//   DELETE /api/live/:key            소재 삭제 (key = 소재 id, 버전 전부 · 팀 비밀번호 필요)
 //   POST   /api/live                 작업 상태 보내기   ?ping=1 작업 중 신호   ?event=1 소재 저장 기록   ?fav=1 하트·메모·숨기기
 //   PUT    /api/live/:eid/full       저장한 소재의 큰 이미지 올리기     PUT /api/live/:eid/svg  올린 SVG 원본 (?svg=1 로 받기)
 //   (소재 갤러리에서 기존 소재를 올릴 때도 ?event=1 에 type:"upload", made(제작일) 로 기록해요)
@@ -116,7 +117,10 @@ async function works(req, env, id, password) {
   const db = env.DB, url = new URL(req.url);
   if (req.method === "GET" && !id) return json({ ok: true, needsPassword: Boolean(password), items: await listMeta(db, "work") });
   if (req.method === "GET") {
-    if (url.searchParams.get("thumb")) return file(env, "wt/" + id, "no-cache");
+    if (url.searchParams.get("thumb")) {
+      const r = await db.prepare("SELECT bin FROM items WHERE ns='work' AND id=?").bind(id).first();
+      return r && r.bin ? bin(new Uint8Array(r.bin), "image/jpeg", "no-cache") : file(env, "wt/" + id, "no-cache");
+    }
     const r = await db.prepare("SELECT body FROM items WHERE ns='work' AND id=?").bind(id).first();
     return r ? new Response(r.body, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } }) : json({ code: "not_found" }, 404);
   }
@@ -131,8 +135,8 @@ async function works(req, env, id, password) {
     const thumb = jpegBytes(body.thumb); delete body.thumb;
     const out = JSON.stringify(body);
     if (out.length > MAX_BODY) return json({ code: "too_large" }, 413);
-    if (thumb && thumb.length < 400 * 1024) await env.FILES.put("wt/" + wid, thumb, { metadata: { type: "image/jpeg" } });
-    await put(db, "work", wid, now, meta, out);
+    // the thumbnail lives next to the work in D1 (auto-save rewrites it often; KV allows few writes a day)
+    await put(db, "work", wid, now, meta, out, thumb && thumb.length < 400 * 1024 ? thumb : null);
     return json({ ok: true, item: { id: wid, ...meta } });
   }
   if (req.method === "DELETE" && id) {
@@ -143,7 +147,7 @@ async function works(req, env, id, password) {
 }
 
 /* ---------- 팀 현황 · 소재 갤러리 ---------- */
-async function live(req, env, id, sub) {
+async function live(req, env, id, sub, password) {
   const db = env.DB, url = new URL(req.url), q = (k) => url.searchParams.get(k);
 
   if (req.method === "GET" && !id) {
@@ -176,6 +180,19 @@ async function live(req, env, id, sub) {
     const r = await db.prepare("SELECT meta, body FROM items WHERE ns='sess' AND id=?").bind(id).first();
     if (!r) return json({ code: "not_found" }, 404);
     return json({ ok: true, meta: parse(r.meta), ...parse(r.body) });
+  }
+
+  // 갤러리에서 소재 삭제: 같은 소재의 저장 기록(버전) 전부와 이미지, 하트·메모까지 지워요
+  if (req.method === "DELETE" && id) {
+    if (password && req.headers.get("x-team-password") !== password) return json({ code: "bad_password" }, 401);
+    if (!okId(id)) return json({ code: "bad_request" }, 400);
+    const { results } = await db.prepare("SELECT id FROM items WHERE ns='ev' AND (id=? OR json_extract(meta,'$.cid')=?)").bind(id, id).all();
+    await db.batch([
+      db.prepare("DELETE FROM items WHERE ns='ev' AND (id=? OR json_extract(meta,'$.cid')=?)").bind(id, id),
+      db.prepare("DELETE FROM items WHERE ns='mark' AND id=?").bind(id),
+    ]);
+    await Promise.all(results.flatMap((r) => ["et/", "ef/", "esvg/"].map((p) => env.FILES.delete(p + r.id).catch(() => {}))));
+    return json({ ok: true, deleted: results.length });
   }
 
   // 갤러리에 올린 피그마 SVG 원본 (편집기에서 레이어로 다시 나눌 때 써요)
@@ -265,7 +282,7 @@ export async function onRequest({ request, env, params }) {
   try {
     if (area === "library") return await library(request, env, id, password);
     if (area === "works") return await works(request, env, id, password);
-    if (area === "live") return await live(request, env, id, sub);
+    if (area === "live") return await live(request, env, id, sub, password);
     if (area === "wimg" || area === "limg") {
       if (request.method === "GET") return okHash(id) ? await file(env, "img/" + id) : json({ code: "bad_request" }, 400);
       if (request.method === "PUT") {
