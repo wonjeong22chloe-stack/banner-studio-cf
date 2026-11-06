@@ -13,7 +13,7 @@
 //   GET    /api/live?gallery=1       소재 갤러리 (저장한 소재 전체 + 하트·메모)
 //   GET    /api/live/:id             세션 작업 상태   ?thumb=1 미리보기  ?full=1 큰 이미지  ?ev=1 저장한 소재의 작업 상태
 //   POST   /api/live                 작업 상태 보내기   ?ping=1 작업 중 신호   ?event=1 소재 저장 기록   ?fav=1 하트·메모·숨기기
-//   PUT    /api/live/:eid/full       저장한 소재의 큰 이미지 올리기
+//   PUT    /api/live/:eid/full       저장한 소재의 큰 이미지 올리기     PUT /api/live/:eid/svg  올린 SVG 원본 (?svg=1 로 받기)
 //   (소재 갤러리에서 기존 소재를 올릴 때도 ?event=1 에 type:"upload", made(제작일) 로 기록해요)
 
 const KEEP_DAYS = 30;
@@ -162,6 +162,7 @@ async function live(req, env, id, sub) {
   if (req.method === "GET") {
     const isEv = id.startsWith("e-");
     if (q("full")) { const r = await file(env, "ef/" + id, "public, max-age=86400"); return r.status === 404 ? file(env, "et/" + id) : r; }
+    if (q("svg")) return file(env, "esvg/" + id, "public, max-age=86400");
     if (q("thumb")) {
       if (isEv) return file(env, "et/" + id);
       const r = await db.prepare("SELECT bin FROM items WHERE ns='sess' AND id=?").bind(id).first();
@@ -175,6 +176,18 @@ async function live(req, env, id, sub) {
     const r = await db.prepare("SELECT meta, body FROM items WHERE ns='sess' AND id=?").bind(id).first();
     if (!r) return json({ code: "not_found" }, 404);
     return json({ ok: true, meta: parse(r.meta), ...parse(r.body) });
+  }
+
+  // 갤러리에 올린 피그마 SVG 원본 (편집기에서 레이어로 다시 나눌 때 써요)
+  if (req.method === "PUT" && id && sub === "svg") {
+    const m = await metaOf(db, "ev", id);
+    if (!m) return json({ code: "not_found" }, 404);
+    if (m.svg) return json({ ok: true });
+    const data = await req.arrayBuffer();
+    if (!data.byteLength || data.byteLength > 20 * 1024 * 1024) return json({ code: "too_large" }, 413);
+    await env.FILES.put("esvg/" + id, data, { metadata: { type: "image/svg+xml" } });
+    await db.prepare("UPDATE items SET meta=? WHERE ns='ev' AND id=?").bind(JSON.stringify({ ...m, svg: true }), id).run();
+    return json({ ok: true });
   }
 
   // 저장한 소재의 큰 이미지 (기록을 만든 직후 한 번만)
