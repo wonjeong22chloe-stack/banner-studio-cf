@@ -2536,7 +2536,7 @@ const headline1 = () => (S.cname || (S.texts.headline||'').split('\n').join(' ')
 async function liveHash(img){ if(img._hash) return img._hash; const b=await blobOf(img); const h=await sha256(b);
   if(!LIVE.uploaded.has(h)){ try{ const r=await fetch('/api/limg/'+h,{method:'PUT',headers:{'content-type':b.type||'image/png'},body:b}); if(r.ok) LIVE.uploaded.add(h); }catch(e){} }
   try{ img._hash=h; }catch(e){} return h; }
-function liveSoon(){ if(!LIVE.on) return; clearTimeout(LIVE.timer); const wait=Math.max(2500,(LIVE.lastSent||0)+8000-Date.now()); LIVE.timer=setTimeout(liveSend,wait); }
+function liveSoon(){ if(!LIVE.on) return; clearTimeout(LIVE.timer); LIVE.timer=setTimeout(liveSend,2500); }
 async function liveSend(){
   if(!LIVE.on||LIVE.sending) return; LIVE.sending=true;
   try{
@@ -2544,15 +2544,13 @@ async function liveSend(){
     const state=snapshot(), sig=state+JSON.stringify(imgs);
     if(sig===LIVE.lastSig) return;
     const r=await fetch('/api/live',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:liveSid(),name:myName(),state,imgs,thumb:workThumb(),tid:S.tid,size:`${W()}x${H()}`,headline:headline1()})});
-    if(r.ok){ LIVE.lastSig=sig; LIVE.lastSent=Date.now(); }
+    if(r.ok) LIVE.lastSig=sig;
   }catch(e){} finally{ LIVE.sending=false; }
 }
-function livePing(){ if(!LIVE.on||document.visibilityState!=='visible'||Date.now()-LIVE.lastAct>10*60e3||Date.now()-(LIVE.lastSent||0)<60e3) return;
+function livePing(){ if(!LIVE.on||document.visibilityState!=='visible'||Date.now()-LIVE.lastAct>10*60e3) return;
   fetch('/api/live?ping=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:liveSid(),name:myName()})}).catch(()=>{}); }
 function sceneJpeg(max,q){ const c=document.createElement('canvas'), k=Math.min(1,max/Math.max(W(),H())); c.width=Math.round(W()*k); c.height=Math.round(H()*k);
   const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); drawScene(g,k,S.tid,S.els,S.objects,false,S.shapes); return c.toDataURL('image/jpeg',q); }
-function sceneBlob(max,q){ const c=document.createElement('canvas'), k=Math.min(1,max/Math.max(W(),H())); c.width=Math.round(W()*k); c.height=Math.round(H()*k);
-  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); drawScene(g,k,S.tid,S.els,S.objects,false,S.shapes); return new Promise(r=>c.toBlob(r,'image/jpeg',q)); }
 async function liveImgs(){
   const prods=[]; for(const p of prodImgs) prods.push(p.sample?{sample:true}:{name:p.name||'',hash:await liveHash(p.img)});
   const cards=[]; for(let i=0;i<cardPics.length;i++){ const c=cardPics[i]; if(!c||!c.img){ cards[i]=null; continue; } const j=prodImgs.findIndex(p=>p.img===c.img); cards[i]= j>=0?{prod:j}:{hash:await liveHash(c.img)}; }
@@ -2560,14 +2558,11 @@ async function liveImgs(){
 }
 async function liveEvent(type){ if(!LIVE.on) return;
   if(!S.cid){ S.cid=newCid(); save(); }
-  const thumb=sceneJpeg(420,.8), full=sceneBlob(1080,.85);
-  const state=snapshot(), base={sid:liveSid(),name:myName(),type,thumb,tid:S.tid,size:`${W()}x${H()}`,headline:headline1(),title:S.cname||'',cid:S.cid,tname:TPL_NAME(S.tid)};
+  const thumb=sceneJpeg(420,.8); let full=sceneJpeg(1200,.86); if(full.length>1.4e6) full=sceneJpeg(1000,.75);
+  const state=snapshot(), base={sid:liveSid(),name:myName(),type,thumb,full,tid:S.tid,size:`${W()}x${H()}`,headline:headline1(),title:S.cname||'',cid:S.cid,tname:TPL_NAME(S.tid)};
   liveSend();
   let imgs=null; try{ imgs=await liveImgs(); }catch(e){}
-  try{ const r=await fetch('/api/live?event=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign(base,{state,imgs}))});
-    const j=r.ok?await r.json():null; const b=await full;
-    if(j&&j.id&&b) await fetch('/api/live/'+encodeURIComponent(j.id)+'/full',{method:'PUT',headers:{'content-type':'image/jpeg'},body:b});
-  }catch(e){} }
+  fetch('/api/live?event=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign(base,{state,imgs}))}).catch(()=>{}); }
 async function liveInit(){
   try{ const r=await fetch('/api/live',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); if(!j||!j.ok) return; }catch(e){ return; }
   LIVE.on=true; $('liveBar').hidden=false; $('teamBtn').hidden=false; $('galleryBtn').hidden=false;
@@ -2580,7 +2575,7 @@ async function liveInit(){
   setInterval(livePing,60e3); document.addEventListener('visibilitychange',livePing);
   $('liveInfo').onclick=()=>openModal(`<div class="head"><h3>팀 현황 공유</h3><button class="btn small" data-close type="button">닫기</button></div>
     <p style="margin:0">이 사이트에서 작업하는 화면은 팀원들의 <b>팀 현황</b>에 보여요.</p>
-    <ul class="hint" style="margin:0;padding-left:18px;line-height:1.7"><li>지금 작업 중인 배너가 몇 초 간격으로 공유돼요.</li><li>PNG·JPG·피그마 저장, 팀 작업함 저장은 ‘최근 저장한 소재’ 기록에 남아요.</li><li>팀 현황 기록은 30일, 소재 갤러리는 계속 보관돼요. 표시 이름은 오른쪽 위 ‘내 이름’ 칸에서 바꿀 수 있어요.</li></ul>`);
+    <ul class="hint" style="margin:0;padding-left:18px;line-height:1.7"><li>지금 작업 중인 배너가 2~3초 간격으로 공유돼요.</li><li>PNG·JPG·피그마 저장, 팀 작업함 저장은 ‘최근 저장한 소재’ 기록에 남아요.</li><li>기록은 30일 동안 보관돼요. 표시 이름은 오른쪽 위 ‘내 이름’ 칸에서 바꿀 수 있어요.</li></ul>`);
   $('teamBtn').onclick=showTeam;
   liveSoon(); livePing();
   const openId=new URLSearchParams(location.search).get('open'); if(openId) openFromGallery(openId);
@@ -2627,7 +2622,7 @@ async function showTeam(){
   };
   m.querySelector('#tmRange').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; teamRange=+b.dataset.v; m.querySelectorAll('#tmRange button').forEach(x=>x.setAttribute('aria-pressed',x===b)); load(); };
   m.querySelectorAll('#tmRange button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.v===teamRange));
-  await load(); teamTimer=setInterval(()=>{ if(document.visibilityState==='visible') load(); },20000);
+  await load(); teamTimer=setInterval(load,8000);
 }
 /* draw someone else's state onto a canvas by briefly swapping the editor's globals */
 const foreignImgCache={};
@@ -2663,7 +2658,7 @@ async function watchSession(sid){
   clearInterval(teamTimer);
   const m=openModal(`<div class="head"><h3 id="lvTitle">실시간 보기</h3><div class="row"><button class="btn small" id="lvBack" type="button">← 팀 현황</button><button class="btn small" data-close type="button">닫기</button></div></div>
     <p class="hint" id="lvStatus" style="margin:0">불러오는 중…</p><canvas class="live-canvas" id="lvCanvas" width="1080" height="1080"></canvas>
-    <div class="row" style="justify-content:space-between"><span class="hint">보기 전용이에요. 상대방 화면은 그대로이고, 몇 초마다 새로 그려요.</span><button class="btn small primary" id="lvTake" type="button">내 화면으로 가져오기</button></div>`);
+    <div class="row" style="justify-content:space-between"><span class="hint">보기 전용이에요. 상대방 화면은 그대로이고, 2~3초마다 새로 그려요.</span><button class="btn small primary" id="lvTake" type="button">내 화면으로 가져오기</button></div>`);
   m.querySelector('.box').style.width='min(860px,100%)';
   let last=0, cur=null, timer=0;
   const tick=async()=>{
